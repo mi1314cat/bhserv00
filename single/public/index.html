@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windstorm Technology Forum</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        /* 直接设置静态背景，避免加载时的渐变扭曲 */
+        body {
+            padding: 20px;
+            background: linear-gradient(135deg,  
+                #ff7300,  
+                #ffeb00,  
+                #47e500,  
+                #00e5c0  
+            ); 
+            background-attachment: fixed;  
+            background-size: 100% 100%;   
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: rgba(255, 255, 255, 0.4);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.15);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: clamp(20px, 5vw, 32px);
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .post {
+            padding: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .post h2 {
+            font-size: clamp(16px, 4vw, 22px);
+            font-weight: bold;
+            color: black;
+            margin-bottom: 8px;
+            transition: color 0.3s ease;
+        }
+
+        .post h2:hover {
+            color: #444;
+        }
+
+        .divider {
+            border-top: 2px dashed rgba(0, 0, 0, 0.6);
+            margin: 8px 0;
+        }
+
+        .post p {
+            color: #222;
+            font-size: clamp(14px, 3.5vw, 18px);
+            line-height: 1.6;
+        }
+
+        .post .author {
+            font-size: clamp(12px, 3vw, 14px);
+            color: #555;
+            margin-top: 5px;
+        }
+
+        /* 移动端优化 */
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                max-width: 90%;
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Windstorm Technology Forum</h1>
+        <div id="postList">Loading...</div>
+    </div>
+
+    <script>
+        // 模拟 API 获取数据
+        document.addEventListener("DOMContentLoaded", () => {
+            fetch("/api/posts")
+                .then(response => response.json())
+                .then(posts => {
+                    const postList = document.getElementById("postList");
+                    postList.innerHTML = posts.map(post => `
+                        <div class="post">
+                            <h2>${post.title}</h2>
+                            <div class="divider"></div>
+                            <p>${post.content}</p>
+                            <div class="author">${post.author} · ${post.date} · ${post.interaction}</div>
+                        </div>
+                    `).join("");
+                })
+                .catch(error => console.error("Failed to load posts:", error));
+        });
+    </script>
+
+</body>
+</html>

@@ -22,43 +22,65 @@ function logMessage(message) {
     logs.push(message);
     if (logs.length > 5) logs.shift();
 }
-function executeCommand(command, actionName, isStartLog = false, callback) {
-    exec(command, (err, stdout, stderr) => {
-        const timestamp = new Date().toLocaleString();
-        if (err) {
-            logMessage(`${actionName} 执行失败: ${err.message}`);
-            if (callback) callback(err.message);
-            return;
-        }
-        if (stderr) {
-            logMessage(`${actionName} 执行标准错误输出: ${stderr}`);
-        }
-        const successMsg = `${actionName} 执行成功:\n${stdout}`;
-        logMessage(successMsg);
-        if (isStartLog) latestStartLog = successMsg;
-        if (callback) callback(stdout);
+
+function executeCommand(command, actionName, isStartLog = false) {
+    return new Promise((resolve, reject) => {
+        exec(command, (err, stdout, stderr) => {
+            const timestamp = new Date().toLocaleString();
+            if (err) {
+                logMessage(`${actionName} 执行失败: ${err.message}`);
+                reject(err.message);  
+                return;
+            }
+            if (stderr) {
+                logMessage(`${actionName} 执行标准错误输出: ${stderr}`);
+            }
+            const successMsg = `${actionName} 执行成功:\n${stdout}`;
+            logMessage(successMsg);
+            if (isStartLog) latestStartLog = successMsg;
+            resolve(stdout);  
+        });
     });
 }
-function runShellCommand() {
-    const command = `cd ${process.env.HOME}/serv00-play/singbox/ && bash start.sh`;
-    executeCommand(command, "start.sh", true);
-}
 
-function stopShellCommand() {
+async function stopShellCommand() {
+    console.log("stop 被调用");
     const command = `cd ${process.env.HOME}/serv00-play/singbox/ && bash killsing-box.sh`;
-    executeCommand(command, "killsing-box.sh", true);
+    try {
+        await executeCommand(command, "killsing-box.sh");
+    } catch (err) {
+        console.error("stop 失败:", err);
+    }
 }
 
-function KeepAlive() {
-    const command = `cd ${process.env.HOME}/serv00-play/ && bash keepalive.sh`;
-    executeCommand(command, "keepalive.sh", true);
+async function runShellCommand() {
+    console.log("start 被调用");
+    const command = `cd ${process.env.HOME}/serv00-play/singbox/ && bash start.sh`;
+    try {
+        await executeCommand(command, "start.sh");
+    } catch (err) {
+        console.error("start 失败:", err);
+    }
 }
+
+async function KeepAlive() {
+    console.log("KeepAlive 被调用");
+    const command = `cd ${process.env.HOME}/serv00-play/ && bash keepalive.sh`;
+    try {
+        await executeCommand(command, "keepalive.sh");
+    } catch (err) {
+        console.error("KeepAlive 失败:", err);
+    }
+}
+
 setInterval(KeepAlive, 20000);
 
 app.get("/info", (req, res) => {
-    runShellCommand();
-    KeepAlive();
     res.sendFile(path.join(__dirname, "public", "info.html"));
+    setTimeout(async () => {
+        await runShellCommand();  
+        await KeepAlive();        
+    }, 1000);  
 });
 
 app.use(express.urlencoded({ extended: true }));
@@ -192,17 +214,24 @@ app.get("/node", (req, res) => {
                         margin: 0;
                         padding: 0;
                         font-family: Arial, sans-serif;
-                        background-color: #f4f4f4;
-                        display: flex;
-                        justify-content: center;
                         align-items: center;
                         min-height: 100vh;
                         padding: 10px;
+                        background: linear-gradient(135deg,  
+                        #ff7300,  
+                        #ffeb00,  
+                        #47e500,  
+                        #00e5c0  
+                        ); 
+                        background-attachment: fixed;  
+                        background-size: 100% 100%;   
+                        display: flex;
+                        justify-content: center;
                     }
                     .content-container {
                         width: 90%;
                         max-width: 600px;
-                        background-color: #fff;
+                        background: rgba(255, 255, 255, 0.2);
                         padding: 15px;
                         border-radius: 8px;
                         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
@@ -219,7 +248,7 @@ app.get("/node", (req, res) => {
                         overflow-y: auto;
                         border: 1px solid #ccc;
                         padding: 8px;
-                        background-color: #f9f9f9;
+                        background-color: transparent;
                         box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
                         border-radius: 5px;
                         white-space: pre-wrap;
@@ -598,8 +627,131 @@ app.get("/outbounds", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "outbounds.html"));
 });
 
+app.get("/api/posts", (req, res) => {
+    function getRandomPost() {
+        const titles = [
+            "Something interesting happened today",
+            "I have a JavaScript question",
+            "How to quickly improve writing skills?",
+            "Sharing my recent trip",
+            "Has anyone used ChatGPT to write code?",
+            "3-month fitness results, sharing insights",
+            "Can anyone recommend a good book?",
+            "What side jobs are people doing?",
+            "Will AI replace humans in the future?",
+            "Have you ever encountered a pitfall in investing?",
+            "The importance of networking",
+            "My thoughts on the latest tech trends",
+            "How to stay productive while working from home",
+            "Building a startup from scratch",
+            "What are your goals for this year?",
+            "How to develop a growth mindset",
+            "Exploring the concept of work-life balance",
+            "Has anyone tried learning a new language recently?",
+            "How to manage stress effectively",
+            "A step-by-step guide to personal finance"
+        ];
+
+        const contents = [
+            "I heard a stranger on the subway talking about his entrepreneurial experience, it was really inspiring, I feel like I should do something too.",
+            "I've been learning JavaScript recently and encountered a strange bug. The console doesn't show any errors, but the function just doesn't work. Has anyone encountered this?",
+            "If I write 500 words every day, will it improve my writing skills? Has anyone tried it?",
+            "I went to Yunnan last month, and experienced the sunrise at Lugu Lake for the first time. It was truly amazing, I highly recommend visiting if you get the chance.",
+            "I've been using ChatGPT to help write Python code, and sometimes the solutions it gives are even simpler than mine. It's amazing.",
+            "I've been working out for 3 months and have lost 10kg, from 80kg to 70kg. The process was tough, but I'm happy with the results. Here's my training plan.",
+            "I'm reading 'The Three-Body Problem' recently, and Liu Cixin's imagination is incredible. Does anyone have book recommendations with a similar style?",
+            "Has anyone tried doing a side job recently? I’m doing the no-inventory business on Xianyu, and it’s surprisingly profitable. Anyone interested?",
+            "AI development is speeding up. Will it really affect our jobs in the future? What do you think?",
+            "I got scammed recently. I bought a fund, and it dropped 10% in 3 days. Investment really shouldn’t be done blindly.",
+            "I recently joined a networking event, and I must say, it was a game-changer. Meeting new people with similar interests is so valuable.",
+            "I’ve been diving deep into the tech world lately and just wanted to share my thoughts on the latest trends like AI and blockchain. It’s a thrilling time!",
+            "I’ve been working remotely for a while now, and here are some of my tips for staying productive when you're at home all day.",
+            "Started working on a startup idea, and I’m learning a lot. Here's how I went from concept to execution. Any tips or advice for beginners?",
+            "This year, I’m focused on improving my personal growth. What are your top goals for 2025? Let’s share and motivate each other!",
+            "I’ve been reading a lot about the importance of having a growth mindset. How do you foster this kind of mindset in your life?",
+            "Lately, I’ve been thinking about how to better manage work-life balance. It’s not easy, but I believe small changes can make a huge difference.",
+            "Has anyone tried learning a new language lately? I just started learning Spanish. It’s tough but exciting!",
+            "Dealing with stress is something I’ve been focusing on recently. What are some effective strategies you use to manage stress in daily life?",
+            "I just put together a personal finance plan for the year. It’s a great way to get on track financially. Anyone else have a finance strategy they follow?"
+        ];
+
+        const authors = [
+            "ryty1", "Watermelon", "Chef", "iorjhg", "Fan Qijun", "uehsgwg", "Zhou Jiu", "Wu Shi", "Zheng Shiyi", "He Chenguang",
+            "Lily", "Jack", "Tom", "Maggie", "Sophie", "Luke", "Eva", "James", "Ella", "Daniel", "Sophia"
+        ];
+
+        function getRandomTime() {
+            const timeOptions = [
+                "5 minutes ago", "20 minutes ago", "1 hour ago", "3 hours ago", "yesterday", "2 days ago", "1 week ago"
+            ];
+            return timeOptions[Math.floor(Math.random() * timeOptions.length)];
+        }
+
+        function getRandomInteraction() {
+            return `👍 ${Math.floor(Math.random() * 100)}  💬 ${Math.floor(Math.random() * 50)}`;
+        }
+
+        return {
+            title: titles[Math.floor(Math.random() * titles.length)],
+            content: contents[Math.floor(Math.random() * contents.length)],
+            author: authors[Math.floor(Math.random() * authors.length)],
+            date: getRandomTime(),
+            interaction: getRandomInteraction()
+        };
+    }
+
+    const posts = Array.from({ length: 10 }, getRandomPost);
+    res.json(posts);
+});
+
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get('/ota/update', (req, res) => {
+    const downloadScriptCommand = 'curl -Ls https://raw.githubusercontent.com/ryty1/serv00-save-me/refs/heads/main/single/ota.sh -o /tmp/ota.sh';
+
+    exec(downloadScriptCommand, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ 下载脚本错误: ${error.message}`);
+            return res.status(500).json({ success: false, message: error.message });
+        }
+        if (stderr) {
+            console.error(`❌ 下载脚本错误输出: ${stderr}`);
+            return res.status(500).json({ success: false, message: stderr });
+        }
+
+        const executeScriptCommand = 'bash /tmp/ota.sh';
+
+        exec(executeScriptCommand, (error, stdout, stderr) => {
+            exec('rm -f /tmp/ota.sh', (err) => {
+                if (err) {
+                    console.error(`❌ 删除临时文件失败: ${err.message}`);
+                } else {
+                    console.log('✅ 临时文件已删除');
+                }
+            });
+
+            if (error) {
+                console.error(`❌ 执行脚本错误: ${error.message}`);
+                return res.status(500).json({ success: false, message: error.message });
+            }
+            if (stderr) {
+                console.error(`❌ 脚本错误输出: ${stderr}`);
+                return res.status(500).json({ success: false, message: stderr });
+            }
+            
+            res.json({ success: true, output: stdout });
+        });
+    });
+});
+
+app.get('/ota', (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "ota.html"));
+});
+
 app.use((req, res, next) => {
-    const validPaths = ["/info", "/hy2ip", "/node", "/log", "/newset", "/config", "/outbounds"];
+    const validPaths = ["/", "/info", "/hy2ip", "/node", "/log", "/newset", "/config", "/outbounds"];
     if (validPaths.includes(req.path)) {
         return next();
     }

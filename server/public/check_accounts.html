@@ -7,15 +7,22 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
             text-align: center;
             margin: 0;
             padding: 0;
+            background: linear-gradient(135deg,  
+                #ff7300,  
+                #ffeb00,  
+                #47e500,  
+                #00e5c0  
+            ); 
+            background-attachment: fixed;  
+            background-size: 100% 100%;   
         }
         .container {
             max-width: 600px;
             margin: 50px auto;
-            background: white;
+            background: rgba(255, 255, 255, 0.2);
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
@@ -37,20 +44,19 @@
             height: 40px; 
             color: white;
         }
-       
         .btn-primary {
             background-color: #007BFF;
             color: white;
         }
         .btn-loading {
-            background-color: #ccc;  
-            color: white;  
-            cursor: not-allowed; 
+            background-color: #ccc;
+            color: white;
+            cursor: not-allowed;
         }
         .results-box {
             margin-top: 15px;
             padding: 15px;
-            background-color: #f9f9f9;
+            background-color: transparent;
             border: 1px solid #ddd;
             border-radius: 8px;
             text-align: left;
@@ -59,29 +65,29 @@
         table {
             width: 100%;
             border-collapse: collapse;
+            background-color: transparent;
         }
         th, td {
-            padding: 3px 8px;  
+            padding: 3px 8px;
             text-align: left;
-            font-size: 14px;  
+            font-size: 14px;
             border-bottom: 1px solid #ddd;
         }
         th {
-            background-color: #f0f0f0;
+            background-color: transparent;
         }
         .status {
             text-align: left;
         }
         .status.normal {
-            color: green;  
+            color: green;
         }
         .status.unregistered {
-            color: blue;   
+            color: blue;
         }
         .status.error {
-            color: red;    
+            color: red;
         }
-
         .loader {
             width: 16px;
             height: 16px;
@@ -102,7 +108,6 @@
     <div class="container">
         <h1>账号检测</h1>
         <button id="checkBtn" class="btn btn-primary" onclick="checkAccounts()">开始检测</button>
-        
         <div id="results" class="results-box"></div>
     </div>
 
@@ -110,64 +115,69 @@
         function checkAccounts() {
             const checkBtn = document.getElementById("checkBtn");
 
+            // 创建加载动画
             const loader = document.createElement("span");
             loader.classList.add("loader");
 
+            // 禁用按钮并显示加载动画
             checkBtn.classList.add("btn-loading");
             checkBtn.innerHTML = ''; 
-            checkBtn.appendChild(loader); 
-            
+            checkBtn.appendChild(loader);
             checkBtn.disabled = true;
 
-            fetch('/checkAccounts')
-                .then(response => response.json())
-                .then(data => {
-                    checkBtn.classList.remove("btn-loading");
-                    checkBtn.innerText = "开始检测"; 
-                    
-                    checkBtn.disabled = false;
+            // 发送 POST 请求
+            fetch('/checkAccounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})  // 这里可以传递数据，目前为空
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 恢复按钮状态
+                checkBtn.classList.remove("btn-loading");
+                checkBtn.innerText = "开始检测";
+                checkBtn.disabled = false;
 
-                    if (data.status === "success") {
-                        const results = data.results;
-                        let resultHTML = '<table>';
-                        resultHTML += '<tr><th>#</th><th>账号</th><th>赛季</th><th>状态</th></tr>';
+                if (data.status === "success") {
+                    const results = data.results;
+                    let resultHTML = '<table>';
+                    resultHTML += '<tr><th>#</th><th>账号</th><th>赛季</th><th>状态</th></tr>';
 
-                        const users = Object.keys(results);
-                        users.forEach((user, index) => {
-                            const season = results[user]?.season || "--";  
-                            const status = results[user]?.status || "未知状态"; 
-                            let statusClass = "normal"; 
-                            
-                            if (status === "账号未注册") {
-                                statusClass = "unregistered"; 
-                            }
-                        
-                            else if (status === "账号已封禁" || status === "检测失败" || status === "未知状态" || status.startsWith("服务器") || status.startsWith("网关")) {
-                                statusClass = "error"; 
-                            }
+                    const users = Object.keys(results);
+                    users.forEach((user, index) => {
+                        const season = results[user]?.season || "--";
+                        const status = results[user]?.status || "未知状态";
+                        let statusClass = "normal";
 
-                            resultHTML += `<tr>
-                                <td>${index + 1}</td>
-                                <td>${user}</td>
-                                <td>${season}</td>
-                                <td class="status ${statusClass}">${status}</td>
-                            </tr>`;
-                        });
+                        if (status === "账号未注册") {
+                            statusClass = "unregistered";
+                        } else if (status === "账号已封禁" || status === "检测失败" || status === "未知状态" || status.startsWith("服务器") || status.startsWith("网关")) {
+                            statusClass = "error";
+                        }
 
-                        resultHTML += '</table>';
-                        document.getElementById("results").innerHTML = resultHTML;
-                    } else {
-                        alert('检测失败，请稍后再试');
-                    }
-                })
-                .catch(error => {
-                    console.error('检测失败:', error);
+                        resultHTML += `<tr>
+                            <td>${index + 1}</td>
+                            <td>${user}</td>
+                            <td>${season}</td>
+                            <td class="status ${statusClass}">${status}</td>
+                        </tr>`;
+                    });
+
+                    resultHTML += '</table>';
+                    document.getElementById("results").innerHTML = resultHTML;
+                } else {
                     alert('检测失败，请稍后再试');
-                
-                    checkBtn.classList.remove("btn-loading");
-                    checkBtn.innerText = "开始检测";
-                    checkBtn.disabled = false;
-                });
+                }
+            })
+            .catch(error => {
+                console.error('检测失败:', error);
+                alert('检测失败，请稍后再试');
+
+                // 恢复按钮状态
+                checkBtn.classList.remove("btn-loading");
+                checkBtn.innerText = "开始检测";
+                checkBtn.disabled = false;
+            });
         }
     </script>
 </body>

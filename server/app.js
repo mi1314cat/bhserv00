@@ -117,28 +117,55 @@ async function sendErrorToTG(user, status, message) {
 
         const bot = new TelegramBot(settings.telegramToken, { polling: false });
         const nowStr = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+        
+        let seasons; 
 
-        let statusMessage;
+        try {
+            const accountsData = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, "utf8"));
+            seasons = accountsData[user]?.season?.toLowerCase();
+        } catch (err) {
+            console.error("⚠️ 读取 accounts.json 失败:", err);
+        }
+
+        let statusMessage, buttonText, buttonUrl;
         if (status === 403) {
             statusMessage = "账号已封禁";
+            buttonText = "重新申请账号";
+            buttonUrl = "https://www.serv00.com/offer/create_new_account";
         } else if (status === 404) {
             statusMessage = "保活未安装";
+            buttonText = "前往安装保活";
+            buttonUrl = "https://github.com/ryty1/serv00-save-me";
         } else if (status >= 500 && status <= 599) {
             statusMessage = "服务器错误";
+            buttonText = "查看服务器状态";
+            buttonUrl = "https://ssss.nyc.mn/";
         } else {
             statusMessage = `访问异常`;
+            buttonText = "手动进入保活";
+            buttonUrl = "https://${user}.serv00.net/info";
         }
 
         const formattedMessage = `
-⚠️ *失败通知*
+㊙️ *失败通知*
 ——————————————————
 👤 账号: \`${user}\`
+🖥️ 主机: \`${seasons}.serv00.com\`
 📶 状态: *${statusMessage}*
 📝 详情: *${status}*•\`${message}\`
 ——————————————————
-🕒 时间: \`${nowStr}\``
+🕒 时间: \`${nowStr}\``;
 
-        await bot.sendMessage(settings.telegramChatId, formattedMessage, { parse_mode: "Markdown" });
+        const options = {
+            parse_mode: "Markdown",
+            reply_markup: {
+                inline_keyboard: [[
+                    { text: buttonText, url: buttonUrl }
+                ]]
+            }
+        };
+
+        await bot.sendMessage(settings.telegramChatId, formattedMessage, options);
 
         console.log(`✅ 已发送 Telegram 通知: ${user} - ${status}`);
     } catch (err) {
@@ -147,41 +174,50 @@ async function sendErrorToTG(user, status, message) {
 }
 
 app.get("/login", async (req, res) => {
+    res.sendFile(path.join(__dirname, "protected", "login.html"));
+
     try {
         const accounts = await getAccounts(true);
         const users = Object.keys(accounts);
 
         const requests = users.map(user =>
-            axios.get(`https://${user}.serv00.net/info`,{timeout:5000})
-                .then(response => {
-                    if (response.status === 200) {
-                        console.log(`✅ ${user} 保活成功，状态码: ${response.status}`);
-                    } else {
-                        console.log(`❌ ${user} 保活失败，状态码: ${response.status}`);
-                        sendErrorToTG(user, response.status, "响应状态异常");
-                    }
-                })
-                .catch(err => {
-                    if (err.response) {
-                        // 服务器返回了一个 HTTP 错误
-                        console.log(`❌ ${user} 保活失败，状态码: ${err.response.status}`);
-                        sendErrorToTG(user, err.response.status, err.response.statusText);
-                    } else {
-                        // 其他网络错误
-                        console.log(`❌ ${user} 保活失败: ${err.message}`);
-                        sendErrorToTG(user, "请求失败", err.message);
-                    }
-                })
+            axios.get(`https://${user}.serv00.net/info`, {
+                timeout: 10000,
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                }
+            })
+            .then(response => {
+                if (response.status === 200 && response.data) {
+                    console.log(`✅ ${user} 保活成功，状态码: ${response.status}`);
+                    console.log(`📄 ${user} 响应大小: ${response.data.length} 字节`);
+
+                    // 模拟浏览器保持页面 3 秒
+                    return new Promise(resolve => setTimeout(resolve, 3000));
+                } else {
+                    console.log(`❌ ${user} 保活失败，状态码: ${response.status}，无数据`);
+                    sendErrorToTG(user, response.status, "响应数据为空");
+                }
+            })
+            .catch(err => {
+                if (err.response) {
+                    console.log(`❌ ${user} 保活失败，状态码: ${err.response.status}`);
+                    sendErrorToTG(user, err.response.status, err.response.statusText);
+                } else {
+                    console.log(`❌ ${user} 保活失败: ${err.message}`);
+                    sendErrorToTG(user, "请求失败", err.message);
+                }
+            })
         );
 
-        await Promise.all(requests);
+        await Promise.allSettled(requests);
         console.log("✅ 所有账号的进程保活已访问完成");
+
     } catch (error) {
         console.error("❌ 访问 /info 失败:", error);
         sendErrorToTG("系统", "全局错误", error.message);
     }
-
-    res.sendFile(path.join(__dirname, "protected", "login.html"));
 });
 
 app.post("/login", (req, res) => {
@@ -271,6 +307,9 @@ io.on("connection", (socket) => {
         socket.emit("accountsList", await getAccounts(true));
     });
 });
+
+const SUB_FILE_PATH = path.join(__dirname, "sub.json");
+
 function filterNodes(nodes) {
     return nodes.filter(node => node.startsWith("vmess://") || node.startsWith("hysteria2://"));
 }
@@ -284,13 +323,10 @@ async function getNodesSummary(socket) {
     }
 
     const users = Object.keys(accounts); 
-    let successfulNodes = { hysteria2: [], vmess: [] }; // hytseria2 放前，vmess 放后
+    let successfulNodes = { hysteria2: [], vmess: [] };
     let failedAccounts = [];
 
-    for (let i = 0; i < users.length; i++) {
-        const userKey = users[i];  
-        const user = accounts[userKey]?.user || userKey; 
-
+    for (let user of users) {
         const nodeUrl = `https://${user}.serv00.net/node`;
         try {
             console.log(`请求节点数据: ${nodeUrl}`);
@@ -320,24 +356,40 @@ async function getNodesSummary(socket) {
         }
     }
 
-    successfulNodes.hysteria2 = successfulNodes.hysteria2.sort((a, b) => {
-        const userA = a.split('@')[0].split('//')[1];
-        const userB = b.split('@')[0].split('//')[1];
-        return users.indexOf(userA) - users.indexOf(userB);
-    });
+    // 整理成 Base64 订阅格式
+    const allNodes = [...successfulNodes.hysteria2, ...successfulNodes.vmess].join("\n");
+    const base64Sub = Buffer.from(allNodes).toString("base64");
 
-    successfulNodes.vmess = successfulNodes.vmess.sort((a, b) => {
-        const userA = a.split('@')[0].split('//')[1];
-        const userB = b.split('@')[0].split('//')[1];
-        return users.indexOf(userA) - users.indexOf(userB);
-    });
+    // 生成 `sub.json`
+    const subData = { sub: base64Sub };
+    fs.writeFileSync(SUB_FILE_PATH, JSON.stringify(subData, null, 4));
 
-    console.log("成功的 hysteria2 节点:", successfulNodes.hysteria2);
-    console.log("成功的 vmess 节点:", successfulNodes.vmess);
-    console.log("失败的账号:", failedAccounts);
+    console.log("订阅文件 sub.json 已更新！");
 
     socket.emit("nodesSummary", { successfulNodes, failedAccounts });
 }
+
+io.on("connection", (socket) => {
+    console.log("客户端已连接");
+
+    socket.on("startNodesSummary", async () => {
+        await getNodesSummary(socket);
+    });
+});
+
+app.get('/sub', (req, res) => {
+    try {
+        const subData = JSON.parse(fs.readFileSync('sub.json', 'utf8')); // 解析 JSON
+        if (subData.sub) {
+            res.setHeader('Content-Type', 'text/plain'); // 纯文本
+            res.send(subData.sub); // 只返回 Base64 订阅内容
+        } else {
+            res.status(500).send('订阅内容为空');
+        }
+    } catch (err) {
+        res.status(500).send('订阅文件读取失败');
+    }
+});
 
 let cronJob = null; 
 
@@ -408,7 +460,7 @@ async function sendCheckResultsToTG() {
         }
 
         const bot = new TelegramBot(settings.telegramToken, { polling: false });
-        const response = await axios.get(`https://${process.env.USER}.serv00.net/checkAccounts`);
+        const response = await axios.post(`https://${process.env.USER}.serv00.net/checkAccounts`, {});
         const data = response.data.results;
 
         if (!data || Object.keys(data).length === 0) {
@@ -477,7 +529,7 @@ const statusMessages = {
     504: "网关超时", 
 };
 
-app.get("/checkAccounts", async (req, res) => {
+app.post("/checkAccounts", async (req, res) => {
     try {
         const accounts = await getAccounts();
         const users = Object.keys(accounts); 
@@ -499,7 +551,7 @@ app.get("/checkAccounts", async (req, res) => {
                 const message = statusMessages[status] || "未知状态"; 
                 results[username] = {
                     status: message,
-                    season: accounts[username]?.season || "--" 
+                    season: accounts[username]?.season || "--"
                 };
             } catch (error) {
                 let status = "检测失败";
